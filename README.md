@@ -1,1 +1,0 @@
-# maoist_death

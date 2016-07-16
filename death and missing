@@ -1,0 +1,401 @@
+### tyoe all QUESTIONS for this data analysis as you work through
+## of all those top surname which year did they start to die or missing
+
+##I think those missing are dead but not found by GOV
+##however I am not here to predict or test the data
+##simply project in visualisation as to what the data is given
+
+
+
+
+
+paths<-file.path('c:', 'r data warehouse', 'nepal')
+setwd(paths)
+getwd()
+
+library(ggplot2)
+library(ggthemes)
+library(dplyr)
+library(scales)
+library(stringi)
+
+library(rgeos)
+library(maptools)
+library(sp)
+library(gpclib)
+library(plyr)
+
+str(read.csv)
+data1 <- read.csv("disappear.csv", stringsAsFactors = FALSE)
+str(data1)
+class(data1)
+
+sum(is.na(data1$DOB))
+###first lets rename varibales properly
+
+str(data1)
+data1<- rename(data1, Status=Missing.Dead,G.Region=Geographical.Region, D.Region=Development.Region,               Name=Full.Name, Sex=Gender, DOB=Year.of.birth, 
+               Birth.place=Place.Of.Birth,Father.name=Father.S.Name, 
+               Place.disappear=Place.of.disapperance,
+               District.disappear= District.of.disapperance,
+               Year.of.disappearance=Year.of.disaaperance)
+str(data1)
+
+#########we just found there was space at the last word of "Missing "##bugger!!!
+
+##remove space
+
+data1$Status<-gsub("[[:space:]]", "", data1$Status)
+data1$Status <- factor(data1$Status)
+
+
+###########
+
+##Total observations 1361
+##Total missing Death   409 & Missing   952
+##Total F   142 & M  1219
+## Total under 18 both Male
+
+
+
+sex.count<-count(data1, Sex)
+sex.count
+
+
+####????????USE this ref hadley wickam pie
+ggplot(sex.count, aes(x = "", y = n, fill = Sex)) +
+        geom_bar(width = 1, stat = "identity") +
+        scale_fill_manual(values = c("red", "yellow")) +
+        coord_polar("y", start = pi / 3) +
+        labs(title = "Sex Ratio")+geom_text(label=percent(sex.count$n/sum(sex.count$n)))+
+        theme_bw()
+
+
+
+
+
+
+
+data1$Sex <-factor(data1$Sex)
+str(data1)
+
+sum(is.na(data1))
+##No NAs
+
+
+## I dont trust given DOB so extracted
+data1$DOB2 <- as.character(sapply(data1$Date.of.Birth, function(x) strsplit(x, '/')[[1]][3]))
+        
+
+sum(is.na(data1$DOB2))
+
+##filter(data1, DOB2==is.na(data1$DOB2))
+
+data1[is.na(data1$DOB2),]
+
+### so we have 2 guys with DOB=0
+filter(data1, Date.of.Birth==0 )
+#############################Ok we have 2 guys Date.of.Birth 0 but their DOB
+##is given
+
+########therefore we take their given age and not use our DOB2
+
+data1$DOB2 <- NULL
+data1$DOB <-as.numeric(data1$DOB)
+
+str(data1)
+
+
+distinct(data1, Place.disappear)
+
+##[318 x 1]
+
+
+##summary(data1$Age)
+##data1$Age <-as.numeric(data1$Age)
+data1$Age <- as.numeric(2016 - data1$DOB)
+
+
+##tbl_df() with this function below wont work so I finally figured out
+
+##MTF!!!!!
+
+data1$Child[data1$Age<18]<-"Child"
+data1$Child[data1$Age>18]<- "Adult"
+
+data1$Child <- factor(data1$Child)
+
+
+str(data1)
+distinct(data1$Child)
+
+table(data1$Child)
+
+
+##strsplit(data1$Name[1], split = " ")[[1]] [length(data1$Name)]
+##length(data1$Name[1])
+
+data1$Surname<-stri_extract_last_words(data1$Name)
+
+str(data1)
+
+zone_status<- as.data.frame((prop.table(table(data1$Status, data1$Zone),1)))
+zone_status<-transform(zone_status, Var2=reorder(Var2, Freq))
+
+
+#############??????????use this one
+ggplot(zone_status, aes(Var2, Freq, fill=Var1))+geom_bar(stat = 'identity', position = 'dodge')+
+        scale_y_continuous(labels = scales::percent, breaks=c(0,.05,.10,.15,.20,.25,.30,.35,.40))+
+        coord_flip()+labs(x='Zones of Nepal', fill="Status")
+
+###Ok the above ggplot shows Bheri and Bagmati and Rapti top 3 places not to be
+
+
+
+
+##by_death <- group_by(data1, Status)
+##summ_age <- summarise(by_death, Mean=mean(Age))
+##summ_age
+
+##below ggplot shows histogram of age filled in by Zones and Status as Facets
+ggplot(data1, aes(Age, fill=Zone))+geom_histogram(binwidth = 1)+facet_grid(.~Status)
+
+
+##########USE this??????????
+
+ggplot(data1, aes(x=(Zone), fill=Status))+geom_bar(position = 'dodge')+theme_bw()+facet_grid(G.Region~.)
+
+##distinct(data1, Surname)
+
+#########################USE THIS......???????????
+ggplot(data1, aes(G.Region, Age, fill=Sex))+geom_boxplot()+geom_jitter(alpha=.1)+geom_hline(yintercept = mean(data1$Age), color='red', linetype='dashed')+theme_bw()+
+        scale_y_continuous(breaks = c(18,20,30,40,50,60,70,80))+facet_grid(.~Status)+labs(x='Geographical Regions')
+
+ggplot(data1, aes(y=Age, x=seq(1,length(data1$Age))))+geom_point()
+
+
+mean(data1$Age)
+
+##ggplot(data1, aes(G.Region, Age))+geom_boxplot()+geom_jitter(alpha=.1)+theme_wsj()
+str(geom_boxplot)
+
+by_district <- group_by(data1[data1$Status=="Death",], District)
+death <- summarise(by_district, count=n())
+death
+
+
+summary(death)
+str(death)
+ 
+##death$District<-as.numeric(death$District)
+##death$count<-as.factor(death$count)
+
+
+death<- transform(death, District=reorder(District, count))
+
+##Total death by district
+
+############USE THIS?????????????????????
+ggplot(death, aes(District, count))+geom_bar(stat = 'identity')+coord_flip()+
+        theme_bw()
+
+
+
+
+by_D.region<- group_by(data1[data1$Status=="Death",], D.Region)
+by_D.region
+
+by_D.region$Death<-1
+dregion_sum <- summarise(by_D.region, Count=n(), Mean_age=round(mean(Age)), Prop_death=Count/409 )
+dregion_sum
+
+
+ggplot(dregion_sum, aes(D.Region, Count, fill=(factor(Mean_age))))+geom_bar(stat="identity")
+
+
+
+
+table(data1$Sex[data1$Status=='Death'])
+##365+44
+
+ggplot(data1[data1$Status=='Death',], aes(G.Region))+geom_bar()
+
+
+##########uSE this????????
+ggplot(data1, aes(G.Region, fill=Status))+geom_bar(position = 'dodge')+
+        labs(x="Geographical Regions")
+
+summary(data1$Year.of.disappearance)
+
+
+##########uSE this????????
+ggplot(data1, aes(Year.of.disappearance, fill=Status))+geom_bar(position = 'dodge')+scale_x_continuous(breaks=c(1996:2006))+
+        facet_grid(G.Region~Sex)+theme_bw()+labs(x="Year of Disapperance")
+
+
+ggplot(data1[data1$Status=='Missing',], aes(Year.of.disappearance, fill=Status))+geom_bar(position = 'dodge')+scale_x_continuous(breaks=c(1996:2006))+theme_bw()
+
+
+
+
+ggplot(filter(data1, Status=='Missing'), aes(Year.of.disappearance, fill=Status))+geom_bar()
+
+table(data1$Surname)
+##we want all surname with count more than 15
+##ggplot(data1, aes(Surname))+geom_bar()
+
+
+surname_table <- as.data.frame(table(data1[data1$Status=='Death',]$Surname))
+
+surname_table<-transform(surname_table, Var1=reorder(Var1, Freq))
+
+surname_table2<-as.data.frame(table(data1[data1$Status=='Death',]$Year.of.disappearance, data1[data1$Status=='Death',]$Surname))
+
+surname_table2<-transform(surname_table2, Var2=reorder(Var2, Freq))
+##ggplot(surname_table2[surname_table2$Freq>0,], aes(x=Var2, y=Freq, color=(Var1)))+geom_jitter()
+
+##ggpot of chaudari only
+ggplot(surname_table2[surname_table2$Var2=='Chaudhari',], aes(x=Var1, y=Freq, fill=Var1))+geom_bar(stat='identity')
+ 
+
+### use this one???????????? . ITs GOOOD
+ggplot(filter(surname_table2, Freq>1), aes(x=Var2, y=Freq, fill=Var1))+geom_bar(stat='identity')+coord_flip()+
+        labs(x='Surname of People who died', fill='Year')
+
+
+png(filename="faithful221.png", width=600, height=700, units='px', res = 100)
+print(ggplot(filter(surname_table2, Freq>1), aes(x=Var2, y=Freq, fill=Var1))+geom_bar(stat='identity')+coord_flip()+
+              labs(x='Surname of People who died', fill='Year'))
+ dev.off()
+
+ggsave('death_with_surname1.jpeg',plot = last_plot(),device=jpeg, width = 5000, height = 2000, units = 'in', limitsize = F, dpi = 1024)
+
+##ggsave(filename, plot = last_plot(), device = NULL, path = NULL, scale = 1, width = NA, height = NA, units = c("in", "cm", "mm"), dpi = 300, limitsize = TRUE, ...)
+
+##ggplot FREQ>1
+ggplot(surname_table[surname_table$Freq>1,], aes(x=Var1, y=Freq))+
+        geom_bar(stat = 'identity')+coord_flip()
+
+sum(surname_table[surname_table$Var1='Chaudhari',]$Freq)
+
+sum(surname_table$Freq)
+
+str(geom_bar)
+
+###I wantto see people who persihed with surname frequency count to top 5 and
+##also their sex and G.Region
+
+death_data <- filter(data1, Status=='Death')
+
+table(death_data$G.Region, death_data$Surname)
+
+y <- count(death_data, G.Region, Surname, Sex)
+y
+sum(y$n)
+
+y<- transform(y, Surname=reorder(Surname, n))
+y
+ggplot(filter(y, n>1), aes(Surname,n,fill=G.Region))+
+        geom_bar(stat='identity')+coord_flip()+
+        theme_bw()
+
+##death<- transform(death, District=reorder(District, count))
+
+
+y$Surname<-factor(y$Surname)
+
+str(y)
+
+  
+ggplot(filter(y, n>2), aes(Surname,n, fill=G.Region))+
+        geom_bar(stat='identity')+coord_flip()+
+        theme_bw()
+
+ggplot(y,aes(Surname,n, fill=G.Region))+
+        geom_bar(stat='identity')+coord_flip()+
+        theme_bw()
+
+##death<- transform(death, District=reorder(District, count))
+
+
+
+###Just a test#######################################################
+ddf<- as.data.frame(list(A=c('a','b','c','d'), V1=c(4,3,2,1), V2=c(44,33,22,11)))
+str(ddf)
+ddf2<-transform(ddf, A=reorder(A, V1))
+ddf2
+ggplot(ddf2, aes(A, V1, fill=as.factor(V2)))+geom_bar(stat='identity')+coord_flip()
+##########################################################################
+
+#####MAPSSSSSSSSSSSSSSSSSSSSSSSSSs
+
+np_dist <- readShapeSpatial('maps/NPL_adm3.shp')
+np_dist <- fortify(np_dist, region="NAME_3")
+
+
+
+
+##districts with death only
+table_district<-as.data.frame(table(data1[data1$Status=='Death',]$District))
+
+distcenters <- ddply(np_dist, .(id), 
+                     summarize, clat = mean(lat), clong = mean(long))
+
+ggplot()+geom_map(data=table_district, aes(map_id=Var1, fill=Freq), map=np_dist)+
+        expand_limits(x=np_dist$long, y=np_dist$lat)+theme_dark()+
+        geom_text(data=distcenters, aes(x=clong, y=clat, label=id, size=0.2))
+
+
+
+table_district$Var1<-as.character(table_district$Var1)
+
+table_district$Var1[table_district$Var1=='Kavre'] <-"Kavrepalanchok"
+
+table_district$Freq<- as.numeric(table_district$Freq)
+
+namesintable_dist <- (table_district$Var1)
+namesinmap<- levels(factor(np_dist$id))
+
+namesintable_dist
+class(table_district)
+
+namesintable_dist[which(!namesintable_dist %in% namesinmap)]
+namesinmap[which(!namesinmap %in% namesintable_dist)]
+
+
+
+table_district<- rbind(table_district, c('Bajhang', 0), c('Bajura', 0), c('Darchula', 0 ), c('Dolakha', 0), c('Dolpa', 0),
+                       c('Gulmi',0), c('Kanchanpur', 0), c('Khotang', 0),
+                       c('Manang', 0), c('Mugu', 0), c('Mustang',0),
+                       c('Okhaldhunga', 0), c('Palpa', 0), c('Pyuthan', 0),
+                       c('Rasuwa', 0), c('Saptari', 0), c('Terhathum', 0))
+summary(table_district$Freq)
+
+
+
+#########use this one
+ggplot()+geom_map(data=table_district, aes(map_id=Var1, fill=Freq), map=np_dist)+
+        expand_limits(x=np_dist$long, y=np_dist$lat)+theme_excel()+
+        geom_text(data=distcenters, aes(x=clong, y=clat, label=id, size=.02))+
+        scale_fill_gradient2(limits=c(0,95), low=("red"), mid="white", midpoint=0, high=("red"))+
+        ggtitle('Districts were people died')+labs(fill='Count', x='Map of Nepal with 75 Districts')
+
+
+sum(table_district$Freq)
+str(table_district)
+##########################???
+
+##lets print it 
+
+ggsave('death_by_zone_ONLY.jpeg', device = 'jpeg', dpi=300, limitsize = F, scale = 2 )
+
+##jpeg("image111.jpeg", quality = 100, width=200, height=117, units='cm')
+##print(ggplot()+geom_map(data=table_district, aes(map_id=Var1, fill=Freq), map=np_dist)+
+##    expand_limits(x=np_dist$long, y=np_dist$lat)+theme_excel()+
+##     geom_text(data=distcenters, aes(x=clong, y=clat, label=id, size=.02))+
+##     scale_fill_gradient2(limits=c(0,95), low=("red"), mid="white", midpoint=0, high=("red"))+
+##      ggtitle('Districts were people died')+labs(fill='Count', x='Map of Nepal with 75 Districts'))
+##dev.off()
+##pdf("plots.pdf")
+##print(qplot(...))
+##dev.off()
